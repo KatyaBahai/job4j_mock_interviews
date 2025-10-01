@@ -12,6 +12,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import ru.checkdev.mock.domain.Interview;
 import ru.checkdev.mock.dto.FilterRequestParams;
+import ru.checkdev.mock.dto.InterviewCountDto;
 import ru.checkdev.mock.dto.InterviewDTO;
 import ru.checkdev.mock.enums.StatusInterview;
 import ru.checkdev.mock.mapper.InterviewMapper;
@@ -170,5 +171,9 @@ public class InterviewService {
                         interviewFilterSpecifications
                                 .createSpecifications(filterRequestParams), PageRequest.of(page, size))
                 .map(InterviewMapper::getInterviewDTO);
+    }
+
+    public List<InterviewCountDto> findNewInterviewCountsByTopic() {
+        return interviewRepository.findAllNewInterviewsWithCountByTopic();
     }
 }

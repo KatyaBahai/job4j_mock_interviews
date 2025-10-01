@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 import ru.checkdev.mock.domain.Interview;
+import ru.checkdev.mock.dto.InterviewCountDto;
 import ru.checkdev.mock.enums.StatusInterview;
 
 import java.util.List;
@@ -81,4 +82,14 @@ public interface InterviewRepository extends JpaRepository<Interview, Integer> {
     List<Interview> findAllByStatus(StatusInterview status);
 
     Page<Interview> findAll(Specification<Interview> specification, Pageable pageable);
+
+
+    @Query("""
+            SELECT new ru.checkdev.mock.dto.InterviewCountDto(COUNT(i.id), i.topicId)
+            FROM interview i
+            WHERE i.status = 1
+            GROUP BY i.topicId
+            ORDER BY i.topicId
+            """)
+    List<InterviewCountDto> findAllNewInterviewsWithCountByTopic();
 }

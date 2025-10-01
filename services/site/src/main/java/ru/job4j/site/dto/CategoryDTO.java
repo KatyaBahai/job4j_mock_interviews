@@ -1,5 +1,6 @@
 package ru.job4j.site.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -13,6 +14,7 @@ public class CategoryDTO {
     private int total;
     private int topicsSize;
     private int position;
+    @JsonProperty("interviewCount")
     private Long countInterview;
 
     public CategoryDTO(int id, String name) {
