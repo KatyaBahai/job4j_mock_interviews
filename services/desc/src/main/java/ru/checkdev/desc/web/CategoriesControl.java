@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.checkdev.desc.dto.CategoryDTO;
+import ru.checkdev.desc.dto.InterviewCountCategoryDto;
 import ru.checkdev.desc.service.CategoryService;
 
 import java.util.List;
@@ -23,7 +24,7 @@ public class CategoriesControl {
     }
 
     @GetMapping("/most_pop")
-    public List<CategoryDTO> getMostPopular() {
+    public List<InterviewCountCategoryDto> getMostPopular() {
         return categoryService.getMostPopular();
     }
 }

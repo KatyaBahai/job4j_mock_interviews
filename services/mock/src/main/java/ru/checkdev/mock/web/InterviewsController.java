@@ -10,6 +10,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ru.checkdev.mock.dto.FilterRequestParams;
+import ru.checkdev.mock.dto.InterviewCountDto;
 import ru.checkdev.mock.dto.InterviewDTO;
 import ru.checkdev.mock.service.InterviewService;
 
@@ -72,6 +73,15 @@ public class InterviewsController {
     @GetMapping("/interviewStatusNew")
     public ResponseEntity<List<InterviewDTO>> getAllNewInterview() {
         List<InterviewDTO> interviews = interviewService.findNewInterview();
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(interviews);
+    }
+
+    @GetMapping("/interviewsCountByTopic")
+    public ResponseEntity<List<InterviewCountDto>> getAllNewInterviewConutDtos() {
+        List<InterviewCountDto> interviews = interviewService.findNewInterviewCountsByTopic();
         return ResponseEntity
                 .status(HttpStatus.OK)
                 .contentType(MediaType.APPLICATION_JSON)

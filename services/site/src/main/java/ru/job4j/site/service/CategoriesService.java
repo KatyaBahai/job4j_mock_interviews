@@ -74,15 +74,20 @@ public class CategoriesService {
         }
         return categoriesDTO;
     }
-
+ /*
     public List<CategoryDTO> getMostPopular() throws JsonProcessingException {
         var categoriesDTO = getPopularFromDesc();
+
         for (var categoryDTO : categoriesDTO) {
             var listTopicId = getAllWithTopicsCount(categoryDTO);
             var count = countInterview(listTopicId);
             categoryDTO.setCountInterview(count);
         }
         return categoriesDTO;
+    } */
+
+    public List<CategoryDTO> getMostPopular() throws JsonProcessingException {
+        return getPopularFromDesc();
     }
 
     public String getNameById(List<CategoryDTO> list, int id) {

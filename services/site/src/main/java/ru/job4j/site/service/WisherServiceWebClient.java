@@ -27,13 +27,21 @@ import java.util.*;
 public class WisherServiceWebClient implements WisherService {
 
     private WebClient webClientWisher;
+    private WebClient webClientDesc;
     private static final String SERVICE_ID = "mock";
     private static final String DIRECT_SINGLE = "/wisher/";
     private static final String DIRECT_MULTIPLE = "/wishers/";
 
+
     public WisherServiceWebClient(EurekaUriProvider uriProvider) {
+        this.webClientWisher = WebClient.create(uriProvider.getUri("mock"));
+        this.webClientDesc = WebClient.create(uriProvider.getUri("desc"));
+    }
+
+   /* public WisherServiceWebClient(EurekaUriProvider uriProvider) {
         this.webClientWisher = WebClient.create(uriProvider.getUri(SERVICE_ID));
     }
+    */
 
     /**
      * Метод сохраняет участника WisherDTO
