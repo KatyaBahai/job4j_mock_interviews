@@ -132,9 +132,8 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>com.github.peterarsentev</groupId>
-            <artifactId>SpringFakeTest</artifactId>
-            <version>v.1.0.3</version>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
         </dependency>
 
     </dependencies>

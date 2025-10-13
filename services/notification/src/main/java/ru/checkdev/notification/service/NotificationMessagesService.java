@@ -2,30 +2,17 @@ package ru.checkdev.notification.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
-import ru.checkdev.notification.domain.InnerMessage;
 import ru.checkdev.notification.dto.CategoryWithTopicDTO;
 import ru.checkdev.notification.dto.FeedbackNotificationDTO;
+import ru.checkdev.notification.dto.NotificationEvent;
 import ru.checkdev.notification.dto.WisherApprovedDTO;
-import ru.checkdev.notification.repository.UserTelegramRepository;
-import ru.checkdev.notification.telegram.Bot;
-
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
+import ru.checkdev.notification.service.kafka.NotificationProducer;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 
 @Service
 @RequiredArgsConstructor
 public class NotificationMessagesService {
-
-    private final UserTelegramRepository userTelegramRepository;
-    private final InnerMessageService innerMessageService;
-    private final Bot bot;
-    private final MessagesGenerator messagesGenerator;
-    private final EurekaUriProvider uriProvider;
-    private static final String SERVICE_ID = "site";
+    private final NotificationProducer notificationProducer;
 
     /**
      * Метод находит chatId всех пользователей, подписанных на категорию и согласившихся на получение оповещений в телеграмм,
@@ -36,10 +23,10 @@ public class NotificationMessagesService {
      */
     public void sendMessagesToCategorySubscribers(List<Integer> categorySubscribersIds,
                                                   CategoryWithTopicDTO categoryWithTopicDTO) {
-        userTelegramRepository.findChatIdInUserIdsIfNotifiable(categorySubscribersIds)
-                .forEach(chatId ->
-                        sendNotificationToCategorySubscriber(chatId,
-                                categoryWithTopicDTO));
+        categorySubscribersIds.forEach(userId -> {
+                    NotificationEvent event = NotificationEvent.forCategory(userId, categoryWithTopicDTO);
+                    notificationProducer.send(event);
+                });
     }
 
     /**
@@ -48,7 +35,7 @@ public class NotificationMessagesService {
      * @param chatId id чата пользователя.
      * @param categoryWithTopicDTO DTO с данными для формирования сообщения.
      */
-    public void sendNotificationToCategorySubscriber(long chatId, CategoryWithTopicDTO categoryWithTopicDTO) {
+   /*  public void sendNotificationToCategorySubscriber(long chatId, CategoryWithTopicDTO categoryWithTopicDTO) {
         bot.send(new SendMessage(
                         String.valueOf(chatId),
                         "В категории "
@@ -60,7 +47,7 @@ public class NotificationMessagesService {
                                 + "/interview/" + categoryWithTopicDTO.getInterviewId()
                 )
         );
-    }
+    } */
 
     /**
      * Метод формирует сообщение об отзыве и отправляет пользователю, которому оставлен отзыв.
@@ -68,25 +55,8 @@ public class NotificationMessagesService {
      * @param feedbackNotification данные для формирования отзыва конкретному пользователю.
      */
     public void sendFeedbackNotification(FeedbackNotificationDTO feedbackNotification) {
-        var optionalChatId = userTelegramRepository
-                .findChatIdByUserIdIfNotifiable(feedbackNotification.getRecipientId());
-        var message = "Пользователь "
-                + feedbackNotification.getSenderName()
-                + " оставил Вам отзыв о собеседовании на тему "
-                + feedbackNotification.getInterviewName()
-                + System.lineSeparator()
-                + "Ссылка на собеседование: "
-                + uriProvider.getUri(SERVICE_ID)
-                + "/interview/" + feedbackNotification.getInterviewId();
-        optionalChatId.ifPresent(aLong -> bot.send(new SendMessage(String.valueOf(aLong), message)));
-        InnerMessage innerMessage = InnerMessage.of()
-                .userId(feedbackNotification.getRecipientId())
-                .text(message)
-                .created(Timestamp.valueOf(LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS)))
-                .read(false)
-                .interviewId(feedbackNotification.getInterviewId())
-                .build();
-        innerMessageService.saveMessage(innerMessage);
+        NotificationEvent event = NotificationEvent.forFeedback(feedbackNotification);
+        notificationProducer.send(event);
     }
 
     /**
@@ -95,26 +65,7 @@ public class NotificationMessagesService {
       * @param wisherApprovedDTO данные для формирования и отправки приглашения на собеседование.
      */
     public void sendApprovedNotification(WisherApprovedDTO wisherApprovedDTO) {
-        var optionalChatId = userTelegramRepository
-                .findChatIdByUserIdIfNotifiable(wisherApprovedDTO.getWisherUserId());
-        var message = String.format("Вы приглашены на собеседование \"[%s](%s)\".%sСвяжитесь с автором: %s",
-                wisherApprovedDTO.getInterviewTitle(),
-                wisherApprovedDTO.getInterviewLink(),
-                System.lineSeparator(),
-                wisherApprovedDTO.getContactBy());
-        InnerMessage innerMessage = InnerMessage.of()
-                .userId(wisherApprovedDTO.getWisherUserId())
-                .text(messagesGenerator.getMessageApprovedWisher(wisherApprovedDTO))
-                .created(Timestamp.valueOf(LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS)))
-                .read(false)
-                .interviewId(wisherApprovedDTO.getInterviewId())
-                .build();
-        CompletableFuture.supplyAsync(() -> innerMessageService.saveMessage(innerMessage));
-        if (optionalChatId.isPresent()) {
-            var chatId = optionalChatId.get();
-            var sendNotification = new SendMessage(String.valueOf(chatId), message);
-            sendNotification.setParseMode("Markdown");
-            bot.send(sendNotification);
-        }
+        NotificationEvent event = NotificationEvent.forApproved(wisherApprovedDTO);
+        notificationProducer.send(event);
     }
 }

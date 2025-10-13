@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -12,8 +13,10 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import ru.checkdev.notification.domain.InnerMessage;
 import ru.checkdev.notification.dto.CategoryWithTopicDTO;
 import ru.checkdev.notification.dto.FeedbackNotificationDTO;
+import ru.checkdev.notification.dto.NotificationEvent;
 import ru.checkdev.notification.dto.WisherApprovedDTO;
 import ru.checkdev.notification.repository.UserTelegramRepository;
+import ru.checkdev.notification.service.kafka.NotificationProducer;
 import ru.checkdev.notification.telegram.Bot;
 
 import java.sql.Timestamp;
@@ -30,185 +33,82 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationMessagesServiceTest {
+    @Mock
+    private NotificationProducer notificationProducer;
 
-    @Mock
-    private UserTelegramRepository userTelegramRepository;
-    @Mock
-    private InnerMessageService innerMessageService;
-    @Mock
-    private Bot mockBot;
-    @Mock
-    private MessagesGenerator messagesGenerator;
-    @Mock
-    private EurekaUriProvider uriProvider;
+    @InjectMocks
     private NotificationMessagesService service;
 
-    @BeforeEach
-    void setUp() {
-        service = new NotificationMessagesService(
-                userTelegramRepository, innerMessageService, mockBot, messagesGenerator, uriProvider);
-    }
-
     @Test
-    void whenSendMessagesToCategorySubscribersThenRepositoryFindListOfChatId() {
-        CategoryWithTopicDTO dto = new CategoryWithTopicDTO(
-                1, "category", 1, "topic", 1, 1);
-        service.sendMessagesToCategorySubscribers(new ArrayList<>(), dto);
-        verify(userTelegramRepository, times(1))
-                .findChatIdInUserIdsIfNotifiable(any(List.class));
-    }
-
-    @Test
-    void whenSendNotificationToCategorySubscriberThenSendMessageSentByBot() {
-        long chatId = 1111L;
-        CategoryWithTopicDTO dto = new CategoryWithTopicDTO(
-                1, "category", 1, "topic", 1, 1);
-        String expectedMessage = "В категории "
-                + dto.getCategoryName()
-                + " появилось новое собеседование."
-                + System.lineSeparator()
-                + "Ссылка на собеседование: "
-                + "null/interview/"
-                + dto.getInterviewId();
-        when(uriProvider.getUri(Mockito.anyString())).thenReturn("null");
-        ArgumentCaptor<SendMessage> captor = ArgumentCaptor.forClass(SendMessage.class);
-
-        service.sendNotificationToCategorySubscriber(chatId, dto);
-
-        verify(mockBot, times(1)).send(captor.capture());
-        assertThat(captor.getValue().getChatId()).isEqualTo(String.valueOf(chatId));
-        assertThat(captor.getValue().getText()).isEqualTo(expectedMessage);
-    }
-
-    @Test
-    void whenSendFeedbackNotificationAndUserExistsThenMessageSavedAndBotSendMessage() {
+    void whenSendFeedbackNotificationThenProducerSendsCorrectEvent() {
+        // given
         FeedbackNotificationDTO dto = new FeedbackNotificationDTO(
-                2, "sName", "iName", 3);
-        long chatId = 1111L;
-        String expectedBotMessage = "Пользователь "
-                + dto.getSenderName()
-                + " оставил Вам отзыв о собеседовании на тему "
-                + dto.getInterviewName()
-                + System.lineSeparator()
-                + "Ссылка на собеседование: "
-                + "null/interview/"
-                + dto.getInterviewId();
-        InnerMessage expectedInnerMessage = createInnerMessage(
-                dto.getRecipientId(),
-                expectedBotMessage,
-                dto.getInterviewId());
-        when(userTelegramRepository.findChatIdByUserIdIfNotifiable(any(Integer.class)))
-                .thenReturn(Optional.of(chatId));
-        when(uriProvider.getUri(Mockito.anyString())).thenReturn("null");
-        ArgumentCaptor<SendMessage> sMessageCaptor = ArgumentCaptor.forClass(SendMessage.class);
-        ArgumentCaptor<InnerMessage> iMessageCaptor = ArgumentCaptor.forClass(InnerMessage.class);
+                2,
+                "sName",
+                "iName",
+                3
+        );
+
+        NotificationEvent expectedEvent = NotificationEvent.forFeedback(dto);
 
         service.sendFeedbackNotification(dto);
 
-        verify(mockBot, times(1)).send(sMessageCaptor.capture());
-        verify(innerMessageService, times(1)).saveMessage(iMessageCaptor.capture());
-        assertThat(sMessageCaptor.getValue().getChatId()).isEqualTo(String.valueOf(chatId));
-        assertThat(sMessageCaptor.getValue().getText()).isEqualTo(expectedBotMessage);
-        assertThat(iMessageCaptor.getValue()).isEqualTo(expectedInnerMessage);
+        ArgumentCaptor<NotificationEvent> captor = ArgumentCaptor.forClass(NotificationEvent.class);
+        verify(notificationProducer, times(1)).send(captor.capture());
+        verifyNoMoreInteractions(notificationProducer);
+
+        NotificationEvent actualEvent = captor.getValue();
+        assertThat(actualEvent).isEqualTo(expectedEvent);
     }
 
     @Test
-    void whenSendFeedbackNotificationAndUserNotExistsThenMessageSaved() {
-        FeedbackNotificationDTO dto = new FeedbackNotificationDTO(
-                2, "sName", "iName", 3);
-        String expectedMessage = "Пользователь "
-                + dto.getSenderName()
-                + " оставил Вам отзыв о собеседовании на тему "
-                + dto.getInterviewName()
-                + System.lineSeparator()
-                + "Ссылка на собеседование: "
-                + "null/interview/"
-                + dto.getInterviewId();
-        InnerMessage expectedInnerMessage = createInnerMessage(
-                dto.getRecipientId(),
-                expectedMessage,
-                dto.getInterviewId());
-        when(userTelegramRepository.findChatIdByUserIdIfNotifiable(any(Integer.class)))
-                .thenReturn(Optional.empty());
-        ArgumentCaptor<InnerMessage> iMessageCaptor = ArgumentCaptor.forClass(InnerMessage.class);
+    void whenSendMessagesToCategorySubscribersThenProducerSendsEventForEachSubscriber() {
+        // given
+        CategoryWithTopicDTO dto = new CategoryWithTopicDTO(
+                1,
+                "Java",
+                2,
+                "Streams API",
+                5,
+                6
+        );
 
-        service.sendFeedbackNotification(dto);
+        List<Integer> subscriberIds = List.of(10, 11, 12);
 
-        verify(mockBot, times(0)).send(any(BotApiMethod.class));
-        verify(innerMessageService, times(1)).saveMessage(iMessageCaptor.capture());
-        assertThat(iMessageCaptor.getValue()).isEqualTo(expectedInnerMessage);
+        List<NotificationEvent> expectedEvents = subscriberIds.stream()
+                .map(userId -> NotificationEvent.forCategory(userId, dto))
+                .toList();
+
+        service.sendMessagesToCategorySubscribers(subscriberIds, dto);
+
+        ArgumentCaptor<NotificationEvent> captor = ArgumentCaptor.forClass(NotificationEvent.class);
+        verify(notificationProducer, times(subscriberIds.size())).send(captor.capture());
+        verifyNoMoreInteractions(notificationProducer);
+
+        List<NotificationEvent> actualEvents = captor.getAllValues();
+        assertThat(actualEvents).containsExactlyElementsOf(expectedEvents);
     }
 
     @Test
-    void whenSendApprovedNotificationAndUserExistsThenMessageSavedAndBotSendMessage() {
-        WisherApprovedDTO dto = new WisherApprovedDTO(
-                2, 3, 4, "iTitle", "link", "contact");
-        long chatId = 1111L;
-        String generatedMessage = String.format("Вы приглашены на собеседование: %s.%sСсылка на собеседование: %s",
-                dto.getInterviewTitle(),
-                System.lineSeparator(),
-                dto.getInterviewLink());
-        String expectedBotMessage = String.format("Вы приглашены на собеседование \"[%s](%s)\".%sСвяжитесь с автором: %s",
-                dto.getInterviewTitle(),
-                dto.getInterviewLink(),
-                System.lineSeparator(),
-                dto.getContactBy());
-        InnerMessage expectedInnerMessage = createInnerMessage(
-                dto.getWisherUserId(),
-                generatedMessage,
-                dto.getInterviewId());
-        when(userTelegramRepository.findChatIdByUserIdIfNotifiable(any(Integer.class)))
-                .thenReturn(Optional.of(chatId));
-        when(messagesGenerator.getMessageApprovedWisher(dto)).thenReturn(generatedMessage);
-        ArgumentCaptor<SendMessage> sMessageCaptor = ArgumentCaptor.forClass(SendMessage.class);
-        ArgumentCaptor<InnerMessage> iMessageCaptor = ArgumentCaptor.forClass(InnerMessage.class);
-        when(innerMessageService.saveMessage(iMessageCaptor.capture())).thenReturn(any());
-
-        service.sendApprovedNotification(dto);
-        await().until(() -> iMessageCaptor.getValue() != null);
-
-        verify(mockBot, times(1)).send(sMessageCaptor.capture());
-        verify(innerMessageService, times(1)).saveMessage(any(InnerMessage.class));
-        assertThat(sMessageCaptor.getValue().getChatId()).isEqualTo(String.valueOf(chatId));
-        assertThat(sMessageCaptor.getValue().getText()).isEqualTo(expectedBotMessage);
-        assertThat(sMessageCaptor.getValue().getParseMode()).isEqualTo("Markdown");
-        assertThat(iMessageCaptor.getValue()).isEqualTo(expectedInnerMessage);
-    }
-
-    @Test
-    void whenSendApprovedNotificationAndUserNotExistsThenMessageSaved() {
-        WisherApprovedDTO dto = new WisherApprovedDTO(
-                2, 3, 4, "iTitle", "link", "contact");
-        String generatedMessage = String.format("Вы приглашены на собеседование: %s.%sСсылка на собеседование: %s",
-                dto.getInterviewTitle(),
-                System.lineSeparator(),
-                dto.getInterviewLink());
-        InnerMessage expectedInnerMessage = createInnerMessage(
-                dto.getWisherUserId(),
-                generatedMessage,
-                dto.getInterviewId());
-        when(userTelegramRepository.findChatIdByUserIdIfNotifiable(any(Integer.class)))
-                .thenReturn(Optional.empty());
-        when(messagesGenerator.getMessageApprovedWisher(dto)).thenReturn(generatedMessage);
-        ArgumentCaptor<InnerMessage> iMessageCaptor = ArgumentCaptor.forClass(InnerMessage.class);
-        when(innerMessageService.saveMessage(iMessageCaptor.capture())).thenReturn(any());
-
-        service.sendApprovedNotification(dto);
-        await().until(() -> iMessageCaptor.getValue() != null);
-
-        verify(mockBot, times(0)).send(any(BotApiMethod.class));
-        verify(innerMessageService, times(1)).saveMessage(any(InnerMessage.class));
-        assertThat(iMessageCaptor.getValue()).isEqualTo(expectedInnerMessage);
-    }
-
-    private InnerMessage createInnerMessage(int userId, String message, int interviewId) {
-        return InnerMessage.of()
-                .userId(userId)
-                .text(message)
-                .created(Timestamp.valueOf(LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS)))
-                .read(false)
-                .interviewId(interviewId)
+    void whenSendApprovedNotificationThenProducerSendsCorrectEvent() {
+        WisherApprovedDTO dto = WisherApprovedDTO.of()
+                .interviewId(7)
+                .wisherId(8)
+                .wisherUserId(15)
+                .interviewTitle("Interview about Spring")
+                .interviewLink("http://localhost:8080/interview/7")
+                .contactBy("contact@example.com")
                 .build();
-    }
 
+        NotificationEvent expectedEvent = NotificationEvent.forApproved(dto);
+
+        service.sendApprovedNotification(dto);
+
+        ArgumentCaptor<NotificationEvent> captor = ArgumentCaptor.forClass(NotificationEvent.class);
+        verify(notificationProducer, times(1)).send(captor.capture());
+        verifyNoMoreInteractions(notificationProducer);
+
+        NotificationEvent actualEvent = captor.getValue();
+        assertThat(actualEvent).isEqualTo(expectedEvent);
+    }
 }
