@@ -1,4 +1,4 @@
-[English version](https://github.com/KatyaBahai/job4j_mock_interviews/new/main#checkdev-microservices---my-study-tasks)
+[English version](https://github.com/KatyaBahai/job4j_mock_interviews/blob/main/MY-CONTRIBUTIONS.md#checkdev-microservices---my-study-tasks)
 
 ## **CheckDev Microservices - Мои учебные задачи**
 ## Применённые технические навыки
@@ -31,6 +31,8 @@ Git Flow | Docker | PostgreSQL
 - Событийные уведомления (Telegram)
 
 
+
+### English version: 
 
 ## **CheckDev Microservices - My study tasks**
 
